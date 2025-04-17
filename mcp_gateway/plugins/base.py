@@ -1,12 +1,8 @@
 import abc
 import logging
-from typing import Any, Dict, Optional, Tuple, List
-
-from mcp import types
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
-
-# --- Plugin Context ---
 
 
 class PluginContext:
@@ -31,6 +27,20 @@ class PluginContext:
             f"PluginContext created for {server_name}/{capability_type}/{capability_name}"
         )
 
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert PluginContext to a dictionary."""
+        return {
+            "server_name": self.server_name,
+            "capability_type": self.capability_type,
+            "capability_name": self.capability_name,
+            "arguments": self.arguments,
+            "response": self.response,
+            "mcp_context": self.mcp_context,
+        }
+    
+    def _replace(self, arguments: Dict[str,Any]) -> bool:
+        self.arguments = arguments
+        return True
 
 # --- Base Plugin Interface ---
 
@@ -96,8 +106,6 @@ class GuardrailPlugin(Plugin, abc.ABC):
         """Sanitize or validate response data."""
         pass
 
-
-# --- Tracing Plugin Interface ---
 
 
 class TracingPlugin(Plugin, abc.ABC):

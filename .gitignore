@@ -172,3 +172,9 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Development files
+.cursor/
+logs/
+tmp/
+tracing.db
