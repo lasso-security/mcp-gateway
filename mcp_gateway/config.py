@@ -2,7 +2,8 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List, Tuple
+from mcp import types
 
 CONFIG_FILE_NAME = "mcp.json"
 
@@ -11,6 +12,10 @@ logger = logging.getLogger(__name__)
 # logging.basicConfig(level=logging.INFO) # Removed basicConfig here
 
 
+class Constants:
+    SERVERS = "servers"
+    
+    
 def find_config_file(mcp_json_path: str) -> Path | None:
     """Uses the provided mcp_json_path to locate the configuration file.
 
@@ -90,21 +95,21 @@ def load_servers_config_from_path(config_path: Path) -> Dict[str, Any]:
             return {}
 
         # 3. Extract the nested 'servers' key from the gateway's config
-        nested_servers_config = gateway_config.get("servers", {})
+        nested_servers_config = gateway_config.get(Constants.SERVERS, {})
         if not isinstance(nested_servers_config, dict):
             logger.warning(
-                f"Nested 'servers' key within '{gateway_config_key}' config in {config_path} is not a dictionary. Treating as empty."
+                f"Nested '{Constants.SERVERS}' key within '{gateway_config_key}' config in {config_path} is not a dictionary. Treating as empty."
             )
             return {}  # Return empty dict if nested 'servers' isn't a dict
 
         if not nested_servers_config:
             logger.warning(
-                f"Nested 'servers' key within '{gateway_config_key}' config in {config_path} is missing or empty. No proxied servers will be configured."
+                f"Nested '{Constants.SERVERS}' key within '{gateway_config_key}' config in {config_path} is missing or empty. No proxied servers will be configured."
             )
             # Fall through to return the (potentially empty) nested_servers_config
 
         logger.info(
-            f"Successfully extracted nested 'servers' config for proxied servers from {config_path}."
+            f"Successfully extracted nested '{Constants.SERVERS}' config for proxied servers from {config_path}."
         )
         # Return the extracted dict directly
         return nested_servers_config
@@ -161,3 +166,31 @@ def load_config(mcp_json_path: str) -> Dict[str, Any]:
         )
         logger.warning("Using empty configuration for proxied servers.")
         return {}  # Return empty dict
+
+
+def get_tool_params_description(tool: types.Tool) -> List[Tuple[str, Any, str]]:
+    param_signatures = []
+
+    # Tool has inputSchema (JSON Schema) instead of arguments
+    if hasattr(tool, "inputSchema") and tool.inputSchema:
+        # Try to extract properties from JSON Schema
+        properties = tool.inputSchema.get("properties", {})
+        for param_name, param_schema in properties.items():
+            param_type = Any  # Default type
+            param_description = param_schema.get("description", "")
+
+            # Map JSON Schema types to Python types
+            json_type = param_schema.get("type")
+            if json_type:
+                type_mapping = {
+                    "string": str,
+                    "integer": int,
+                    "boolean": bool,
+                    "number": float,
+                    "object": Dict[str, Any],
+                    "array": List[Any],
+                }
+                param_type = type_mapping.get(json_type, Any)
+
+            param_signatures.append((param_name, param_type, param_description))
+    return param_signatures
