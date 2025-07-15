@@ -1,15 +1,31 @@
-# MCP Gateway
 
-![Hugging Face Token Masking Example](docs/MCP_Flow.png)
+<div align="center">
+  <a href="https://pypi.org/project/mcp-gateway/">
+    <img src="https://img.shields.io/pypi/v/mcp-gateway.svg?color=blue" alt="PyPI version">
+  </a>
+  <a href="https://pypi.org/project/mcp-gateway/">
+    <img src="https://img.shields.io/pypi/pyversions/mcp-gateway.svg" alt="Python Versions">
+  </a>
+  <a href="./LICENSE">
+    <img src="https://img.shields.io/github/license/lasso-security/mcp-gateway" alt="License">
+  </a>
+  
+  # MCP Gateway
+
+</div>
+
+# Overview
+![](docs/MCP_Flow.png)
 
 MCP Gateway is an advanced intermediary solution for Model Context Protocol (MCP) servers that centralizes and enhances your AI infrastructure.
 
 MCP Gateway acts as an intermediary between LLMs and other MCP servers. It:
 
-1. Reads server configurations from a `mcp.json` file located in your root directory.
-2. Manages the lifecycle of configured MCP servers.
-3. Intercepts requests and responses to sanitize sensitive information.
-4. Provides a unified interface for discovering and interacting with all proxied MCPs.
+1. 📄 Reads server configurations from a `mcp.json` file located in your root directory.
+2. ⚙️ Manages the lifecycle of configured MCP servers.
+3. 🛡️ Intercepts requests and responses to sanitize sensitive information.
+4. 🔗 Provides a unified interface for discovering and interacting with all proxied MCPs.
+5. 🔒 **Security Scanner** - Analyzes server reputation and security risks before loading MCP servers.
 
 ## Installation
 
@@ -293,6 +309,7 @@ The Lasso guardrail checks content through Lasso's API for security violations b
 
 Read more on our website 👉 [Lasso Security](https://www.lasso.security/).
 
+
 ## Tracing
 
 ### Xetrack
@@ -398,6 +415,82 @@ D SELECT server_name,capability_name,path,content_text FROM db.events LIMIT 1;
 
 Of course you can use another MCP server to query the sqlite database 😊
 
+# Scanner
+
+The Security Scanner analyzes MCP servers for potential security risks before loading, providing an additional layer of protection through reputation analysis and tool description scanning.
+
+```bash
+mcp-gateway --scan -p basic
+```
+
+**Features:**
+- 🔍 **Reputation Analysis** - Evaluates server reputation using marketplace (Smithery, NPM) and GitHub data
+- 🛡️ **Tool Description Scanning** - Detects hidden instructions, sensitive file patterns, and malicious actions
+- ⚡ **Automatic Blocking** - Blocks risky MCPs based on reputation scores (threshold: 30) and security analysis
+- 📝 **Configuration Updates** - Automatically updates your MCP configuration file with scan results
+
+## Quickstart
+Initial configuration:
+```json
+{
+    "mcpServers": {
+        "mcp-gateway": {
+            "command": "mcp-gateway",
+            "args": [
+                "--mcp-json-path",
+                "~/.cursor/mcp.json",
+                "--scan"
+            ],
+            "servers": {
+                "filesystem": {
+                    "command": "npx",
+                    "args": [
+                        "-y",
+                        "@modelcontextprotocol/server-filesystem",
+                        "."
+                    ]
+                }
+            }
+        }
+    }
+}
+```
+After the first run, the scanner will analyze all configured MCP servers and add a `blocked` status to your configuration:
+```json
+{
+    "mcpServers": {
+        "mcp-gateway": {
+            "command": "mcp-gateway",
+            "args": [
+                "--mcp-json-path",
+                "~/.cursor/mcp.json",
+                "--scan"
+            ],
+            "servers": {
+                "filesystem": {
+                    "command": "npx",
+                    "args": [
+                        "-y",
+                        "@modelcontextprotocol/server-filesystem",
+                        "."
+                    ],
+                    "blocked": "passed"
+                }
+            }
+        }
+    }
+}
+```
+**Status Values:**
+- `"passed"` - Server passed all security checks and is safe to use
+- `"blocked"` - Server failed security checks and will be blocked from loading
+- `"skipped"` - Server scanning was skipped (manual override)
+- `null` - Server not yet scanned or previously blocked server now considered safe
+
+> **Note:** You can manually change a blocked server to `"skipped"` if you're confident it's safe.
+
+
+
 ## How It Works
 Your agent interacts directly with our MCP Gateway, which functions as a central router and management system. Each underlying MCP is individually wrapped and managed.
 
@@ -412,6 +505,9 @@ Key Features
 * Provides comprehensive dashboard for all your MCPs in a single interface.
 * Includes intelligent risk assessment with MCP risk scoring.
 * Delivers real-time status monitoring and performance metrics.
+
+**Security Scanner**
+* Analyzes MCP server reputation and tool descriptions for security risks before loading.
 
 **Advanced Tracking**
 * Maintains detailed logs of all requests and responses for each guardrail.

@@ -46,13 +46,14 @@ class TestBasicGuardrailPlugin:
         assert "import requests" in cleaned_text
         assert "api_url = " in cleaned_text
 
-    def test_data_anonymizer(
+    def test_sanitize_text(
         self, plugin: BasicGuardrailPlugin, pii_sample_text: str
     ) -> None:
         """
-        Test that _data_anonymizer correctly applies both PII and secret anonymization.
+        Test that _sanitize_text correctly applies secret anonymization.
+        Note: BasicGuardrailPlugin only handles secrets, not PII.
         """
-        anonymized_text = plugin._data_anonymizer(pii_sample_text)
+        anonymized_text = plugin._sanitize_text(pii_sample_text)
 
         # GitHub OAuth token should be anonymized
         assert "gho_16C7e42F292c6912E7710c838347Ae178B4a" not in anonymized_text

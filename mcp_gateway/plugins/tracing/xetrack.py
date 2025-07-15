@@ -84,6 +84,9 @@ def to_events(context: PluginContext, event: Dict[str, Any]) -> List[Dict[str, A
             else:
                 response["content"] = f"<binary data ({len(content)} bytes)>"
             response["mime_type"] = mime_type
+        elif isinstance(context_response, dict):
+            # For plain dictionary responses
+            response = context_response.copy()
     except Exception as e:
         response["error_getting_response"] = str(e)
 
