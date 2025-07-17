@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/lasso-security-mcp-gateway-badge.png)](https://mseep.ai/app/lasso-security-mcp-gateway)
+
 # MCP Gateway
 
 ![Hugging Face Token Masking Example](docs/MCP_Flow.png)
