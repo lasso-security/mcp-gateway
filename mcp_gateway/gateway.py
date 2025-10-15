@@ -449,7 +449,7 @@ async def lifespan(server: FastMCP) -> AsyncIterator[GetewayContext]:
 
 # Initialize the MCP gateway server
 # Pass description and version if desired
-mcp = FastMCP("MCP Gateway", lifespan=lifespan, version="1.0.0")
+mcp = FastMCP("MCP Gateway", lifespan=lifespan)
 
 
 # --- Gateway's Own Capability Implementations ---
