@@ -1,0 +1,11 @@
+name: Release New Version
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log message
+        run: echo "Release workflow triggered"
