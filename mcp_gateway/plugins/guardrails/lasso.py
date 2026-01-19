@@ -35,7 +35,7 @@ class LassoGuardrailPlugin(GuardrailPlugin):
         self.lasso_api_key: Optional[str] = None
         self.user_id: Optional[str] = None
         self.conversation_id: Optional[str] = None
-        self.api_base: str = "https://server.lasso.security/gateway/v2/classify"
+        self.api_base: str = "https://server.lasso.security/gateway/v3/classify"
         self.http_client: Optional[httpx.AsyncClient] = None
 
     def load(self, config: Optional[Dict[str, Any]] = None) -> None:
@@ -100,9 +100,9 @@ class LassoGuardrailPlugin(GuardrailPlugin):
 
         return headers
 
-    def _prepare_payload(self, messages: List[Dict[str, str]]) -> Dict[str, Any]:
-        """Prepare the payload for the Lasso API request."""
-        return {"messages": messages}
+    def _prepare_payload(self, messages: List[Dict[str, str]], message_type: str = "PROMPT") -> Dict[str, Any]:
+        """Prepare the payload for the Lasso API v3 request."""
+        return {"messages": messages, "messageType": message_type}
 
     async def _call_lasso_api(
         self, headers: Dict[str, str], payload: Dict[str, Any]
@@ -156,13 +156,26 @@ class LassoGuardrailPlugin(GuardrailPlugin):
                     violated_deputies.append(deputy)
         return violated_deputies
 
+    def _extract_string_values(self, obj: Any, values: List[str]) -> None:
+        """Recursively extract all string values from nested dicts/lists."""
+        if isinstance(obj, str):
+            if obj.strip():  # Skip empty strings
+                values.append(obj)
+        elif isinstance(obj, dict):
+            for v in obj.values():
+                self._extract_string_values(v, values)
+        elif isinstance(obj, list):
+            for item in obj:
+                self._extract_string_values(item, values)
+
     def _extract_messages_from_request(
         self, arguments: Dict[str, Any]
     ) -> List[Dict[str, str]]:
         """Extract messages from request arguments."""
         messages = []
         logger.info(f"Extracting lasso messages from request arguments: {arguments}")
-        # Handle direct messages array in arguments (common case)
+
+        # Handle direct messages array in arguments (chat-style format)
         if (
             arguments
             and "messages" in arguments
@@ -171,14 +184,23 @@ class LassoGuardrailPlugin(GuardrailPlugin):
             raw_messages = arguments["messages"]
             for msg in raw_messages:
                 if isinstance(msg, dict) and "role" in msg and "content" in msg:
-                    # Handle content as string or as a TextContent object
                     content = msg["content"]
                     if isinstance(content, dict) and "text" in content:
                         content = content["text"]
                     if isinstance(content, str):
                         messages.append({"role": msg["role"], "content": content})
 
-        # If we couldn't find messages in the expected format, log a warning
+        # If no messages format, extract ALL string values from arguments
+        # This handles MCP tools like falcon-mcp that use filter/query args
+        if not messages and arguments:
+            all_strings: List[str] = []
+            self._extract_string_values(arguments, all_strings)
+            if all_strings:
+                # Combine all string values into a single user message
+                combined_content = " ".join(all_strings)
+                messages.append({"role": "user", "content": combined_content})
+                logger.info(f"Extracted {len(all_strings)} string values from arguments for Lasso check")
+
         if not messages:
             logger.warning("Could not extract messages from request arguments")
 
