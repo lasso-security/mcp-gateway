@@ -95,6 +95,36 @@ def test_plugin_load_with_env_vars() -> None:
             os.environ.pop("LASSO_USER_ID", None)
 
 
+def test_extract_string_values() -> None:
+    """Test recursive string extraction from nested structures."""
+    plugin = LassoGuardrailPlugin()
+
+    # Test nested dict
+    values: List[str] = []
+    plugin._extract_string_values({"a": "hello", "b": {"c": "world"}}, values)
+    assert values == ["hello", "world"]
+
+    # Test list
+    values = []
+    plugin._extract_string_values(["a", "b", "c"], values)
+    assert values == ["a", "b", "c"]
+
+    # Test mixed nested structure
+    values = []
+    plugin._extract_string_values({"items": ["x", "y"], "nested": {"key": "z"}}, values)
+    assert set(values) == {"x", "y", "z"}
+
+    # Test empty strings are skipped
+    values = []
+    plugin._extract_string_values({"a": "", "b": "  ", "c": "valid"}, values)
+    assert values == ["valid"]
+
+    # Test non-string values are ignored
+    values = []
+    plugin._extract_string_values({"num": 123, "bool": True, "str": "text"}, values)
+    assert values == ["text"]
+
+
 def test_extract_messages_from_request() -> None:
     """Test extracting messages from request arguments."""
     plugin = LassoGuardrailPlugin()

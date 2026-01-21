@@ -13,13 +13,9 @@ logger = logging.getLogger(__name__)
 class LassoGuardrailAPIError(Exception):
     """Exception raised when the Lasso API call fails."""
 
-    pass
-
 
 class LassoGuardrailMissingSecrets(Exception):
     """Exception raised when required API credentials are missing."""
-
-    pass
 
 
 @register_plugin
@@ -46,7 +42,7 @@ class LassoGuardrailPlugin(GuardrailPlugin):
         - lasso_api_key: The API key for Lasso (falls back to LASSO_API_KEY env var)
         - user_id: Optional user ID to associate with requests (falls back to LASSO_USER_ID env var)
         - conversation_id: Optional conversation ID (falls back to LASSO_CONVERSATION_ID env var)
-        - api_base: URL for the Lasso API (default: https://server.lasso.security/gateway/v2/classify)
+        - api_base: URL for the Lasso API (default: https://server.lasso.security/gateway/v3/classify)
         """
         if config is None:
             config = {}
@@ -100,7 +96,9 @@ class LassoGuardrailPlugin(GuardrailPlugin):
 
         return headers
 
-    def _prepare_payload(self, messages: List[Dict[str, str]], message_type: str = "PROMPT") -> Dict[str, Any]:
+    def _prepare_payload(
+        self, messages: List[Dict[str, str]], message_type: str = "PROMPT"
+    ) -> Dict[str, Any]:
         """Prepare the payload for the Lasso API v3 request."""
         return {"messages": messages, "messageType": message_type}
 
@@ -173,7 +171,7 @@ class LassoGuardrailPlugin(GuardrailPlugin):
     ) -> List[Dict[str, str]]:
         """Extract messages from request arguments."""
         messages = []
-        logger.info(f"Extracting lasso messages from request arguments: {arguments}")
+        logger.debug(f"Extracting messages from request arguments: {arguments}")
 
         # Handle direct messages array in arguments (chat-style format)
         if (
@@ -199,7 +197,9 @@ class LassoGuardrailPlugin(GuardrailPlugin):
                 # Combine all string values into a single user message
                 combined_content = " ".join(all_strings)
                 messages.append({"role": "user", "content": combined_content})
-                logger.info(f"Extracted {len(all_strings)} string values from arguments for Lasso check")
+                logger.info(
+                    f"Extracted {len(all_strings)} string values from arguments for Lasso check"
+                )
 
         if not messages:
             logger.warning("Could not extract messages from request arguments")
@@ -219,18 +219,6 @@ class LassoGuardrailPlugin(GuardrailPlugin):
             for content_item in response.content:
                 if isinstance(content_item, types.TextContent) and content_item.text:
                     messages.append({"role": "assistant", "content": content_item.text})
-
-        # Handle direct text in outputs (older format)
-        elif isinstance(response, types.CallToolResult) and hasattr(
-            response, "outputs"
-        ):
-            for output in response.outputs:
-                if (
-                    isinstance(output, dict)
-                    and output.get("type") == "text"
-                    and "text" in output
-                ):
-                    messages.append({"role": "assistant", "content": output["text"]})
 
         # If we couldn't find text content in the expected format, log a warning
         if not messages:
