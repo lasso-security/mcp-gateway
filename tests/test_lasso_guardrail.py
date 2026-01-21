@@ -63,7 +63,7 @@ def test_plugin_initialization() -> None:
     plugin = LassoGuardrailPlugin()
     assert plugin.plugin_type == "guardrail"
     assert plugin.lasso_api_key is None
-    assert plugin.api_base == "https://server.lasso.security/gateway/v2/classify"
+    assert plugin.api_base == "https://server.lasso.security/gateway/v3/classify"
 
 
 def test_plugin_load_with_env_vars() -> None:
@@ -95,6 +95,36 @@ def test_plugin_load_with_env_vars() -> None:
             os.environ.pop("LASSO_USER_ID", None)
 
 
+def test_extract_string_values() -> None:
+    """Test recursive string extraction from nested structures."""
+    plugin = LassoGuardrailPlugin()
+
+    # Test nested dict
+    values: List[str] = []
+    plugin._extract_string_values({"a": "hello", "b": {"c": "world"}}, values)
+    assert values == ["hello", "world"]
+
+    # Test list
+    values = []
+    plugin._extract_string_values(["a", "b", "c"], values)
+    assert values == ["a", "b", "c"]
+
+    # Test mixed nested structure
+    values = []
+    plugin._extract_string_values({"items": ["x", "y"], "nested": {"key": "z"}}, values)
+    assert set(values) == {"x", "y", "z"}
+
+    # Test empty strings are skipped
+    values = []
+    plugin._extract_string_values({"a": "", "b": "  ", "c": "valid"}, values)
+    assert values == ["valid"]
+
+    # Test non-string values are ignored
+    values = []
+    plugin._extract_string_values({"num": 123, "bool": True, "str": "text"}, values)
+    assert values == ["text"]
+
+
 def test_extract_messages_from_request() -> None:
     """Test extracting messages from request arguments."""
     plugin = LassoGuardrailPlugin()
@@ -113,6 +143,29 @@ def test_extract_messages_from_request() -> None:
     assert messages[0]["role"] == "user"
     assert messages[0]["content"] == "Test message 1"
     assert messages[2]["content"] == "Message with nested content"
+
+
+def test_extract_messages_from_request_fallback() -> None:
+    """Test fallback extraction for non-chat-style arguments preserves context."""
+    plugin = LassoGuardrailPlugin()
+
+    # Non-chat-style arguments (like filter/query tools)
+    arguments: Dict[str, Any] = {
+        "filter": "status:active",
+        "query": "find all users",
+        "limit": 10,  # Non-string values should be ignored
+    }
+
+    messages = plugin._extract_messages_from_request(arguments)
+
+    assert len(messages) == 1
+    assert messages[0]["role"] == "user"
+    # Should preserve argument keys in the content
+    content = messages[0]["content"]
+    assert "filter:" in content
+    assert "status:active" in content
+    assert "query:" in content
+    assert "find all users" in content
 
 
 def test_extract_text_from_response() -> None:
