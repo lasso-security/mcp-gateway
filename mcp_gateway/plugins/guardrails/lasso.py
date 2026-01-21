@@ -188,17 +188,20 @@ class LassoGuardrailPlugin(GuardrailPlugin):
                     if isinstance(content, str):
                         messages.append({"role": msg["role"], "content": content})
 
-        # If no messages format, extract ALL string values from arguments
+        # If no messages format, extract string values per argument key
         # This handles MCP tools like falcon-mcp that use filter/query args
         if not messages and arguments:
-            all_strings: List[str] = []
-            self._extract_string_values(arguments, all_strings)
-            if all_strings:
-                # Combine all string values into a single user message
-                combined_content = " ".join(all_strings)
+            arg_contents: List[str] = []
+            for key, value in arguments.items():
+                key_strings: List[str] = []
+                self._extract_string_values(value, key_strings)
+                if key_strings:
+                    arg_contents.append(f"{key}: {' '.join(key_strings)}")
+            if arg_contents:
+                combined_content = "; ".join(arg_contents)
                 messages.append({"role": "user", "content": combined_content})
-                logger.info(
-                    f"Extracted {len(all_strings)} string values from arguments for Lasso check"
+                logger.debug(
+                    f"Extracted values from {len(arg_contents)} arguments for Lasso check"
                 )
 
         if not messages:

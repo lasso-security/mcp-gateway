@@ -145,6 +145,29 @@ def test_extract_messages_from_request() -> None:
     assert messages[2]["content"] == "Message with nested content"
 
 
+def test_extract_messages_from_request_fallback() -> None:
+    """Test fallback extraction for non-chat-style arguments preserves context."""
+    plugin = LassoGuardrailPlugin()
+
+    # Non-chat-style arguments (like filter/query tools)
+    arguments: Dict[str, Any] = {
+        "filter": "status:active",
+        "query": "find all users",
+        "limit": 10,  # Non-string values should be ignored
+    }
+
+    messages = plugin._extract_messages_from_request(arguments)
+
+    assert len(messages) == 1
+    assert messages[0]["role"] == "user"
+    # Should preserve argument keys in the content
+    content = messages[0]["content"]
+    assert "filter:" in content
+    assert "status:active" in content
+    assert "query:" in content
+    assert "find all users" in content
+
+
 def test_extract_text_from_response() -> None:
     """Test extracting text from a response object."""
     plugin = LassoGuardrailPlugin()
