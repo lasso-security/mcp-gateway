@@ -63,7 +63,7 @@ def test_plugin_initialization() -> None:
     plugin = LassoGuardrailPlugin()
     assert plugin.plugin_type == "guardrail"
     assert plugin.lasso_api_key is None
-    assert plugin.api_base == "https://server.lasso.security/gateway/v2/classify"
+    assert plugin.api_base == "https://server.lasso.security/gateway/v3/classify"
 
 
 def test_plugin_load_with_env_vars() -> None:
