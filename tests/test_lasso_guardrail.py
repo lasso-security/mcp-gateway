@@ -199,15 +199,26 @@ def test_prepare_headers() -> None:
 
 def test_prepare_payload_basic() -> None:
     """Test basic payload preparation without userId."""
-    plugin = LassoGuardrailPlugin()
-    plugin.load()
+    # Save original env var to isolate test from environment state
+    original_user_id = os.environ.get("LASSO_USER_ID")
 
-    messages = [{"role": "user", "content": "Test message"}]
-    payload = plugin._prepare_payload(messages)
+    try:
+        # Ensure no user_id is picked up from environment
+        os.environ.pop("LASSO_USER_ID", None)
 
-    assert payload["messages"] == messages
-    assert payload["messageType"] == "PROMPT"
-    assert "userId" not in payload
+        plugin = LassoGuardrailPlugin()
+        plugin.load()
+
+        messages = [{"role": "user", "content": "Test message"}]
+        payload = plugin._prepare_payload(messages)
+
+        assert payload["messages"] == messages
+        assert payload["messageType"] == "PROMPT"
+        assert "userId" not in payload
+    finally:
+        # Restore original env var
+        if original_user_id:
+            os.environ["LASSO_USER_ID"] = original_user_id
 
 
 def test_prepare_payload_with_user_id() -> None:
