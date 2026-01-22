@@ -87,9 +87,6 @@ class LassoGuardrailPlugin(GuardrailPlugin):
             "Content-Type": "application/json",
         }
 
-        # Add optional headers if provided
-        if self.user_id:
-            headers["lasso-user-id"] = self.user_id
 
         if self.conversation_id:
             headers["lasso-conversation-id"] = self.conversation_id
@@ -100,7 +97,13 @@ class LassoGuardrailPlugin(GuardrailPlugin):
         self, messages: List[Dict[str, str]], message_type: str = "PROMPT"
     ) -> Dict[str, Any]:
         """Prepare the payload for the Lasso API v3 request."""
-        return {"messages": messages, "messageType": message_type}
+        payload: Dict[str, Any] = {"messages": messages, "messageType": message_type}
+
+        # Add optional userId to body if provided
+        if self.user_id:
+            payload["userId"] = self.user_id
+
+        return payload
 
     async def _call_lasso_api(
         self, headers: Dict[str, str], payload: Dict[str, Any]
@@ -306,9 +309,9 @@ class LassoGuardrailPlugin(GuardrailPlugin):
             if not messages:
                 return context.response
 
-            # Prepare and make API call
+            # Prepare and make API call (use COMPLETION for responses)
             headers = self._prepare_headers()
-            payload = self._prepare_payload(messages)
+            payload = self._prepare_payload(messages, message_type="COMPLETION")
             response = await self._call_lasso_api(headers, payload)
 
             # Process response

@@ -197,6 +197,56 @@ def test_prepare_headers() -> None:
     assert headers["Content-Type"] == "application/json"
 
 
+def test_prepare_payload_basic() -> None:
+    """Test basic payload preparation without userId."""
+    # Save original env var to isolate test from environment state
+    original_user_id = os.environ.get("LASSO_USER_ID")
+
+    try:
+        # Ensure no user_id is picked up from environment
+        os.environ.pop("LASSO_USER_ID", None)
+
+        plugin = LassoGuardrailPlugin()
+        plugin.load()
+
+        messages = [{"role": "user", "content": "Test message"}]
+        payload = plugin._prepare_payload(messages)
+
+        assert payload["messages"] == messages
+        assert payload["messageType"] == "PROMPT"
+        assert "userId" not in payload
+    finally:
+        # Restore original env var
+        if original_user_id:
+            os.environ["LASSO_USER_ID"] = original_user_id
+
+
+def test_prepare_payload_with_user_id() -> None:
+    """Test payload preparation includes userId when set."""
+    plugin = LassoGuardrailPlugin()
+    plugin.load({"user_id": "test-user-123"})
+
+    messages = [{"role": "user", "content": "Test message"}]
+    payload = plugin._prepare_payload(messages)
+
+    assert payload["messages"] == messages
+    assert payload["messageType"] == "PROMPT"
+    assert payload["userId"] == "test-user-123"
+
+
+def test_prepare_payload_completion_type() -> None:
+    """Test payload preparation with COMPLETION message type for responses."""
+    plugin = LassoGuardrailPlugin()
+    plugin.load({"user_id": "test-user-456"})
+
+    messages = [{"role": "assistant", "content": "Response text"}]
+    payload = plugin._prepare_payload(messages, message_type="COMPLETION")
+
+    assert payload["messages"] == messages
+    assert payload["messageType"] == "COMPLETION"
+    assert payload["userId"] == "test-user-456"
+
+
 @pytest.mark.skipif(not os.environ.get("LASSO_API_KEY"), reason="LASSO_API_KEY not set")
 @pytest.mark.asyncio
 async def test_process_request_with_safe_content(
