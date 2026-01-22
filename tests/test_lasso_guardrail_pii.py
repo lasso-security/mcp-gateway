@@ -88,10 +88,11 @@ async def test_pii_detection_in_request(lasso_plugin: LassoGuardrailPlugin) -> N
     try:
         # Direct API call to check connectivity and auth
         headers = lasso_plugin._prepare_headers()
-        # Make a simple API call to test auth before proceeding
-        await lasso_plugin._call_lasso_api(
-            headers, {"messages": [{"role": "user", "content": "Auth test"}]}
+        payload = lasso_plugin._prepare_payload(
+            [{"role": "user", "content": "Auth test"}]
         )
+        # Make a simple API call to test auth before proceeding
+        await lasso_plugin._call_lasso_api(headers, payload)
     except LassoGuardrailAPIError as e:
         if should_skip_due_to_auth_error(e):
             logger.warning(f"Skipping test due to API authorization error: {e}")
@@ -132,9 +133,10 @@ async def test_no_pii_in_request(lasso_plugin: LassoGuardrailPlugin) -> None:
     try:
         # Direct API call to check connectivity and auth
         headers = lasso_plugin._prepare_headers()
-        await lasso_plugin._call_lasso_api(
-            headers, {"messages": [{"role": "user", "content": "Auth test"}]}
+        payload = lasso_plugin._prepare_payload(
+            [{"role": "user", "content": "Auth test"}]
         )
+        await lasso_plugin._call_lasso_api(headers, payload)
     except LassoGuardrailAPIError as e:
         if should_skip_due_to_auth_error(e):
             logger.warning(f"Skipping test due to API authorization error: {e}")
@@ -179,9 +181,10 @@ async def test_pii_detection_in_response(lasso_plugin: LassoGuardrailPlugin) -> 
     try:
         # Direct API call to check connectivity and auth
         headers = lasso_plugin._prepare_headers()
-        await lasso_plugin._call_lasso_api(
-            headers, {"messages": [{"role": "user", "content": "Auth test"}]}
+        payload = lasso_plugin._prepare_payload(
+            [{"role": "user", "content": "Auth test"}]
         )
+        await lasso_plugin._call_lasso_api(headers, payload)
     except LassoGuardrailAPIError as e:
         if should_skip_due_to_auth_error(e):
             logger.warning(f"Skipping test due to API authorization error: {e}")
