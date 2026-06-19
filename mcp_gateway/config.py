@@ -2,7 +2,10 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Dict, Any, List, Tuple
+from dataclasses import dataclass
+from keyword import iskeyword
+import re
+from typing import Dict, Any, List
 from mcp import types
 
 CONFIG_FILE_NAME = "mcp.json"
@@ -14,6 +17,18 @@ logger = logging.getLogger(__name__)
 
 class Constants:
     SERVERS = "servers"
+
+
+@dataclass(frozen=True)
+class ToolParamDescription:
+    name: str
+    python_name: str
+    type_annotation: Any
+    description: str
+    required: bool
+
+    def __getitem__(self, index: int) -> Any:
+        return (self.name, self.type_annotation, self.description)[index]
     
     
 def find_config_file(mcp_json_path: str) -> Path | None:
@@ -168,13 +183,15 @@ def load_config(mcp_json_path: str) -> Dict[str, Any]:
         return {}  # Return empty dict
 
 
-def get_tool_params_description(tool: types.Tool) -> List[Tuple[str, Any, str]]:
+def get_tool_params_description(tool: types.Tool) -> List[ToolParamDescription]:
     param_signatures = []
 
     # Tool has inputSchema (JSON Schema) instead of arguments
     if hasattr(tool, "inputSchema") and tool.inputSchema:
         # Try to extract properties from JSON Schema
         properties = tool.inputSchema.get("properties", {})
+        required_params = set(tool.inputSchema.get("required", []))
+        used_python_names = set()
         for param_name, param_schema in properties.items():
             param_type = Any  # Default type
             param_description = param_schema.get("description", "")
@@ -192,5 +209,29 @@ def get_tool_params_description(tool: types.Tool) -> List[Tuple[str, Any, str]]:
                 }
                 param_type = type_mapping.get(json_type, Any)
 
-            param_signatures.append((param_name, param_type, param_description))
+            param_signatures.append(
+                ToolParamDescription(
+                    name=param_name,
+                    python_name=_safe_parameter_name(param_name, used_python_names),
+                    type_annotation=param_type,
+                    description=param_description,
+                    required=param_name in required_params,
+                )
+            )
     return param_signatures
+
+
+def _safe_parameter_name(name: str, used_names: set[str]) -> str:
+    safe_name = re.sub(r"\W", "_", name)
+    if not safe_name or safe_name[0].isdigit() or iskeyword(safe_name):
+        safe_name = f"param_{safe_name}"
+    if not safe_name.isidentifier():
+        safe_name = "param"
+
+    candidate = safe_name
+    index = 2
+    while candidate in used_names:
+        candidate = f"{safe_name}_{index}"
+        index += 1
+    used_names.add(candidate)
+    return candidate
