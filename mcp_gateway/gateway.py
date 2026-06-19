@@ -10,8 +10,10 @@ from typing import (
     AsyncIterator,
     List,
     Tuple,
+    Annotated,
 )
 import inspect
+from pydantic import Field
 
 from mcp.server.fastmcp import FastMCP, Context
 from mcp import types
@@ -46,7 +48,8 @@ async def register_dynamic_tool(
     logger.debug(f"Attempting to register dynamic tool: {dynamic_tool_name}")
 
     # Extract parameter types from the tool's inputSchema
-    param_signatures = get_tool_params_description(tool)# Create a properly typed dynamic function based on the original tool's signature
+    param_signatures = get_tool_params_description(tool)
+
     def create_typed_handler(param_signatures):
         # Create parameters for the function signature
         parameters = [
@@ -59,16 +62,24 @@ async def register_dynamic_tool(
 
         annotations = {"ctx": Context, "return": types.CallToolResult}
 
+        required_params = [param for param in param_signatures if param.required]
+        optional_params = [param for param in param_signatures if not param.required]
+
         # Add parameters from the original tool
-        for name, type_ann, description in param_signatures:
+        for param in required_params + optional_params:
+            annotation = Annotated[
+                param.type_annotation, Field(alias=param.name, description=param.description)
+            ]
+            default = inspect.Parameter.empty if param.required else None
             parameters.append(
                 inspect.Parameter(
-                    name=name,
-                    annotation=type_ann,
+                    name=param.python_name,
+                    annotation=annotation,
                     kind=inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                    default=default,
                 )
             )
-            annotations[name] = type_ann
+            annotations[param.python_name] = annotation
 
         # Create the proper signature
         sig = inspect.Signature(parameters=parameters)
@@ -77,7 +88,11 @@ async def register_dynamic_tool(
         async def dynamic_tool_impl(*args, **kwargs):
             ctx = kwargs.get("ctx", args[0] if args else None)
             # Remove ctx from kwargs before passing to the proxied server
-            tool_kwargs = {k: v for k, v in kwargs.items() if k != "ctx"}
+            tool_kwargs = {
+                param.name: value
+                for param in param_signatures
+                if (value := _get_tool_argument(kwargs, param)) is not None
+            }
 
             logger.info(
                 f"Executing dynamic tool '{dynamic_tool_name}' (proxied from {server_name}/{tool.name})"
@@ -139,6 +154,10 @@ async def register_dynamic_tool(
             f"Failed to register dynamic tool {dynamic_tool_name} with FastMCP: {e}",
             exc_info=True,
         )
+
+
+def _get_tool_argument(kwargs, param):
+    return kwargs.get(param.name, kwargs.get(param.python_name))
 
 
 async def register_dynamic_prompt(
