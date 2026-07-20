@@ -194,3 +194,55 @@ def get_tool_params_description(tool: types.Tool) -> List[Tuple[str, Any, str]]:
 
             param_signatures.append((param_name, param_type, param_description))
     return param_signatures
+
+
+def _collect_schema_strings(
+    schema: Any,
+    collected: List[str],
+    depth: int = 0,
+    max_depth: int = 20,
+) -> None:
+    """Recursively collect every string value found in a JSON Schema fragment.
+
+    The security scanner uses this so that tool-poisoning payloads hidden in
+    schema fields *other* than 'description' (e.g. 'enum', 'const', 'default',
+    'examples', 'title', and strings nested inside 'anyOf'/'allOf'/'oneOf')
+    are still fed to the analyzer.
+
+    Notes:
+        - External '$ref' pointers are never dereferenced; we only walk the
+          schema already provided by the server. The '$ref' value itself is
+          skipped to avoid treating a URI/pointer as scannable prose.
+        - Recursion depth is bounded to guard against pathological or
+          maliciously deep schemas.
+    """
+    if depth > max_depth:
+        return
+    if isinstance(schema, str):
+        text = schema.strip()
+        if text:
+            collected.append(text)
+    elif isinstance(schema, dict):
+        for key, value in schema.items():
+            # Do not follow references; skip the pointer target only.
+            if key == "$ref":
+                continue
+            _collect_schema_strings(value, collected, depth + 1, max_depth)
+    elif isinstance(schema, list):
+        for item in schema:
+            _collect_schema_strings(item, collected, depth + 1, max_depth)
+
+
+def get_tool_schema_strings(tool: types.Tool) -> List[str]:
+    """Return all human-readable string values from a tool's input/output schema.
+
+    Unlike ``get_tool_params_description`` (which only extracts the 'description'
+    of each top-level parameter), this walks the entire schema so the scanner
+    inspects the full attacker-controlled surface, not just descriptions.
+    """
+    collected: List[str] = []
+    for schema_attr in ("inputSchema", "outputSchema"):
+        schema = getattr(tool, schema_attr, None)
+        if schema:
+            _collect_schema_strings(schema, collected)
+    return collected
