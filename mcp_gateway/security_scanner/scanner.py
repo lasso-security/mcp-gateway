@@ -2,7 +2,7 @@ import json
 import logging
 import os  # Added for path expansion and directory creation
 from pathlib import Path  # Added for path manipulation
-from mcp_gateway.config import Constants, get_tool_params_description
+from mcp_gateway.config import Constants, get_tool_schema_strings
 from mcp_gateway.security_scanner.config import MarketPlaces, logger
 from mcp_gateway.security_scanner.project_analyzer import ProjectAnalyzer
 from mcp_gateway.security_scanner.tool_poisoning_analyzer import ToolAnalyzer
@@ -165,10 +165,12 @@ class Scanner:
             try:
                 # Check each tool in the server
                 for tool in proxied_server.list_tools():
-                    tool_params_description = "\n".join(
-                        param[2] for param in get_tool_params_description(tool)
-                    )
-                    description = tool.description + "\n\n" + tool_params_description
+                    # Scan the full attacker-controlled schema surface, not just
+                    # the tool/param descriptions. Payloads can hide in enum,
+                    # const, default, examples, title, etc.
+                    scannable_parts = [tool.description or ""]
+                    scannable_parts.extend(get_tool_schema_strings(tool))
+                    description = "\n\n".join(part for part in scannable_parts if part)
                     tool_risks = self._tool_analyzer.is_description_safe(description)
 
                     if not tool_risks.get("is_safe"):
