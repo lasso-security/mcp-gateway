@@ -194,3 +194,62 @@ def get_tool_params_description(tool: types.Tool) -> List[Tuple[str, Any, str]]:
 
             param_signatures.append((param_name, param_type, param_description))
     return param_signatures
+
+
+# Guards against pathological or hand-built schemas; JSON-parsed schemas are
+# nowhere near this deep.
+MAX_SCHEMA_DEPTH = 50
+
+
+def collect_schema_strings(schema: Any) -> List[str]:
+    """Collects every string value found anywhere in a JSON Schema.
+
+    ``get_tool_params_description`` only reads the ``description`` of each
+    top-level property, so any string living elsewhere in the schema is never
+    handed to the analyzer. The model, however, receives the *whole* schema.
+    That gap means a directive planted in an ``enum`` value, a ``default``, a
+    ``title``, or anything nested one level down is read by the model while the
+    scan stays green.
+
+    Walking the full structure instead of an allowlist of fields closes that by
+    construction: new JSON Schema keywords are covered without touching this
+    function again.
+
+    Args:
+        schema: Any JSON Schema fragment (dict, list, or scalar).
+
+    Returns:
+        List[str]: Every non-empty string value in the fragment, de-duplicated
+                   and in the order first encountered.
+    """
+    collected: List[str] = []
+    seen_values: set = set()
+    seen_containers: set = set()
+
+    def _walk(node: Any, depth: int) -> None:
+        if depth > MAX_SCHEMA_DEPTH:
+            logger.warning(
+                f"Schema traversal exceeded max depth {MAX_SCHEMA_DEPTH}; branch truncated"
+            )
+            return
+
+        if isinstance(node, dict):
+            # Cycles are impossible in parsed JSON but possible in a
+            # hand-built dict; do not let one hang the scan.
+            if id(node) in seen_containers:
+                return
+            seen_containers.add(id(node))
+            for value in node.values():
+                _walk(value, depth + 1)
+        elif isinstance(node, (list, tuple)):
+            if id(node) in seen_containers:
+                return
+            seen_containers.add(id(node))
+            for item in node:
+                _walk(item, depth + 1)
+        elif isinstance(node, str) and node and node not in seen_values:
+            seen_values.add(node)
+            collected.append(node)
+
+    _walk(schema, 0)
+    return collected

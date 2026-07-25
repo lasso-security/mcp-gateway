@@ -2,7 +2,7 @@ import json
 import logging
 import os  # Added for path expansion and directory creation
 from pathlib import Path  # Added for path manipulation
-from mcp_gateway.config import Constants, get_tool_params_description
+from mcp_gateway.config import Constants, collect_schema_strings
 from mcp_gateway.security_scanner.config import MarketPlaces, logger
 from mcp_gateway.security_scanner.project_analyzer import ProjectAnalyzer
 from mcp_gateway.security_scanner.tool_poisoning_analyzer import ToolAnalyzer
@@ -165,10 +165,17 @@ class Scanner:
             try:
                 # Check each tool in the server
                 for tool in proxied_server.list_tools():
-                    tool_params_description = "\n".join(
-                        param[2] for param in get_tool_params_description(tool)
+                    # Analyze every string the model can see, not just the
+                    # descriptions: an imperative planted in an enum value or a
+                    # nested property is model-visible but was never scanned.
+                    schema_strings = collect_schema_strings(
+                        getattr(tool, "inputSchema", None)
                     )
-                    description = tool.description + "\n\n" + tool_params_description
+                    description = "\n\n".join(
+                        part
+                        for part in [tool.description or "", *schema_strings]
+                        if part
+                    )
                     tool_risks = self._tool_analyzer.is_description_safe(description)
 
                     if not tool_risks.get("is_safe"):
