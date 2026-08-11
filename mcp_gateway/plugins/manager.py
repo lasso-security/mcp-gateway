@@ -6,6 +6,7 @@ from mcp_gateway.plugins.base import (
     Plugin,
     PluginContext,
     GuardrailPlugin,
+    LifecyclePlugin,
     TracingPlugin,
 )
 
@@ -17,6 +18,7 @@ PluginT = TypeVar("PluginT", bound=Plugin)
 # Plugin registry to store all registered plugins
 _PLUGIN_REGISTRY: Dict[str, List[Type[Plugin]]] = {
     GuardrailPlugin.plugin_type: [],
+    LifecyclePlugin.plugin_type: [],
     TracingPlugin.plugin_type: [],
 }
 
@@ -88,6 +90,7 @@ def discover_plugins():
     # The __init__.py files should already import all plugin modules
     try:
         import mcp_gateway.plugins.guardrails
+        import mcp_gateway.plugins.lifecycle
         import mcp_gateway.plugins.tracing
 
         logger.info(f"Discovered {len(_PLUGIN_NAME_TO_INFO)} plugins")
@@ -126,6 +129,7 @@ class PluginManager:
         self,
         enabled_types: Optional[List[str]] = None,
         enabled_plugins: Optional[Dict[str, List[str]]] = None,
+        plugin_configs: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> None:
         """Initializes the PluginManager with configured plugins.
 
@@ -141,6 +145,7 @@ class PluginManager:
 
         self.enabled_types = enabled_types or []
         self.enabled_plugins = enabled_plugins or {}
+        self.plugin_configs = plugin_configs or {}
 
         # Dictionary to store instantiated plugin objects
         self._plugins: Dict[str, List[Plugin]] = {}
@@ -195,7 +200,12 @@ class PluginManager:
                 # Instantiate and load the plugin
                 try:
                     plugin_instance = plugin_cls()
-                    plugin_instance.load({})  # Empty config by default
+                    config = (
+                        self.plugin_configs.get(plugin_attr_name)
+                        or self.plugin_configs.get(plugin_name)
+                        or {}
+                    )
+                    plugin_instance.load(config)
                     self._plugins[plugin_type].append(plugin_instance)
                     logger.info(
                         f"Loaded plugin: {plugin_cls.__name__} (type: {plugin_type})"
@@ -336,3 +346,22 @@ class PluginManager:
                 )
 
         return current_response
+
+    async def notify_server_capabilities_ready(
+        self, server_name: str, proxied_server: Any
+    ) -> None:
+        """Notify lifecycle plugins that a proxied server's contract is ready."""
+        for plugin in self.get_plugins(LifecyclePlugin.plugin_type):
+            try:
+                if inspect.iscoroutinefunction(plugin.on_server_capabilities_ready):
+                    await plugin.on_server_capabilities_ready(
+                        server_name, proxied_server
+                    )
+                else:
+                    plugin.on_server_capabilities_ready(server_name, proxied_server)
+            except Exception as e:
+                logger.error(
+                    f"Error in lifecycle plugin {plugin.__class__.__name__} "
+                    f"for server '{server_name}': {e}",
+                    exc_info=True,
+                )
