@@ -72,6 +72,13 @@ class _StubServer:
         ]
 
 
+def _fingerprint_extra_available() -> bool:
+    """True when McpFingerprintPlugin.load() enables the optional extra."""
+    probe = McpFingerprintPlugin()
+    probe.load({})
+    return probe._enabled
+
+
 @pytest.fixture
 def baseline_dir(tmp_path: Path) -> Path:
     return tmp_path / "baselines"
@@ -86,6 +93,8 @@ def plugin(baseline_dir: Path) -> McpFingerprintPlugin:
             "bootstrap": False,
         }
     )
+    if not plugin._enabled:
+        pytest.skip("mcp-fingerprint optional extra not available")
     return plugin
 
 
@@ -98,6 +107,8 @@ def bootstrap_plugin(baseline_dir: Path) -> McpFingerprintPlugin:
             "bootstrap": True,
         }
     )
+    if not plugin._enabled:
+        pytest.skip("mcp-fingerprint optional extra not available")
     return plugin
 
 
@@ -392,6 +403,10 @@ async def test_plugin_manager_isolates_lifecycle_exceptions(
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    not _fingerprint_extra_available(),
+    reason="mcp-fingerprint optional extra not available",
+)
 async def test_tool_registration_unchanged_with_fingerprint_enabled(
     tmp_path: Path,
 ) -> None:
@@ -433,6 +448,10 @@ async def test_tool_registration_unchanged_with_fingerprint_enabled(
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    not _fingerprint_extra_available(),
+    reason="mcp-fingerprint optional extra not available",
+)
 async def test_tool_calls_unchanged_with_fingerprint_enabled(
     tmp_path: Path,
 ) -> None:
