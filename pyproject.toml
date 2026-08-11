@@ -37,6 +37,9 @@ presidio = [
 xetrack = [
     "xetrack>=0.3.4",
 ]
+fingerprint = [
+    "mcp-fingerprint>=0.2.1; python_version >= '3.12' and python_version < '3.13'",
+]
 
 [project.scripts]
 mcp-gateway = "mcp_gateway.server:main"
@@ -52,6 +55,9 @@ exclude = ["data*", "front*", "tests*"]
 
 [tool.setuptools.package-data]
 "*" = ["docs/*.png"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
 
 [dependency-groups]
 dev = [

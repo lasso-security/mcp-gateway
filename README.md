@@ -221,6 +221,33 @@ MCP Gateway supports various plugins to enhance security and functionality. Here
 
 **Note:** To use the `presidio` plugin, you need to install it separately: `pip install mcp-gateway[presidio]`.
 
+## MCP Fingerprint (observe-only)
+
+Install the optional dependency on supported Python (3.12.x):
+
+```bash
+pip install "mcp-gateway[fingerprint]"
+```
+
+Enable observe-only contract fingerprinting at proxied server startup:
+
+```bash
+mcp-gateway --mcp-json-path ~/.cursor/mcp.json -p mcp-fingerprint
+```
+
+Bootstrap missing baselines without overwriting existing files:
+
+```bash
+mcp-gateway --mcp-json-path ~/.cursor/mcp.json -p mcp-fingerprint --fingerprint-bootstrap
+```
+
+Options:
+
+- `--fingerprint-baseline-dir DIR` — baseline directory (default: `.mcp-fingerprint`)
+- `--fingerprint-bootstrap` — create missing baselines only; never overwrite existing baselines
+
+v1 has no runtime `listChanged` support. Restart the gateway to re-check tool contracts against saved baselines. Fingerprint status is logged only and never blocks startup, tool registration, or tool calls.
+
 
 ### Basic 
 ```bash

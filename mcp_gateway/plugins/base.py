@@ -108,6 +108,24 @@ class GuardrailPlugin(Plugin, abc.ABC):
 
 
 
+class LifecyclePlugin(Plugin, abc.ABC):
+    """Minimal lifecycle hook for observe-only plugins at capability readiness."""
+
+    plugin_type = "lifecycle"
+
+    def process_request(self, context: PluginContext) -> Optional[Dict[str, Any]]:
+        return context.arguments
+
+    def process_response(self, context: PluginContext) -> Any:
+        return context.response
+
+    def on_server_capabilities_ready(
+        self, server_name: str, proxied_server: Any
+    ) -> None:
+        """Called after initial tools/list contract is available for a proxied server."""
+        pass
+
+
 class TracingPlugin(Plugin, abc.ABC):
     """Abstract base class for Tracing plugins (logging, monitoring)."""
 

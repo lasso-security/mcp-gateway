@@ -371,9 +371,23 @@ async def lifespan(server: FastMCP) -> AsyncIterator[GetewayContext]:
     else:
         logger.info("Tracing plugins DISABLED.")
 
+    if "lifecycle" in enabled_plugin_types:
+        logger.info(f"Lifecycle plugins ENABLED: {enabled_plugins.get('lifecycle', [])}")
+    else:
+        logger.info("Lifecycle plugins DISABLED.")
+
+    plugin_configs: Dict[str, Dict[str, Any]] = {}
+    if cli_args and "mcp-fingerprint" in cli_args.plugin:
+        plugin_configs["mcp-fingerprint"] = {
+            "baseline_dir": cli_args.fingerprint_baseline_dir,
+            "bootstrap": cli_args.fingerprint_bootstrap,
+        }
+
     # Initialize plugin manager with configuration
     plugin_manager = PluginManager(
-        enabled_types=enabled_plugin_types, enabled_plugins=enabled_plugins
+        enabled_types=enabled_plugin_types,
+        enabled_plugins=enabled_plugins,
+        plugin_configs=plugin_configs,
     )
 
     # Load proxied server configs
@@ -426,6 +440,13 @@ async def lifespan(server: FastMCP) -> AsyncIterator[GetewayContext]:
         logger.warning(
             "No proxied MCP servers configured. Running in standalone mode (plugins still active)."
         )
+
+    # Observe-only lifecycle hooks after capability acquisition, before registration.
+    for server_name, proxied_server in context.proxied_servers.items():
+        if proxied_server.session:
+            await plugin_manager.notify_server_capabilities_ready(
+                server_name, proxied_server
+            )
 
     # Register capabilities from proxied servers
     await register_proxied_capabilities(server, context)
@@ -587,6 +608,20 @@ def parse_args(args=None):
         "--scan",
         action="store_true",
         help="Enable security scanner.",
+    )
+    parser.add_argument(
+        "--fingerprint-baseline-dir",
+        type=str,
+        default=".mcp-fingerprint",
+        help="Directory for mcp-fingerprint baseline files (default: .mcp-fingerprint).",
+    )
+    parser.add_argument(
+        "--fingerprint-bootstrap",
+        action="store_true",
+        help=(
+            "Create missing mcp-fingerprint baselines without overwriting existing files. "
+            "Gateway restart re-checks in observe mode."
+        ),
     )
     if args is None:
         args = sys.argv[1:]
