@@ -206,6 +206,10 @@ Here are the tools the MCP is using to create a proxy to the other MCP servers
 
 # Plugins
 
+## Optional TOA verify
+
+Offline [TOA](https://github.com/Carmel-Labs-Inc/toa) gate docs: [docs/toa-optional-plugin.md](docs/toa-optional-plugin.md).
+
 ## Contribute
 For more details on how the plugin system works, how to create your own plugins, or how to contribute, please see the [Plugin System Documentation](./mcp_gateway/plugins/README.md).
 
