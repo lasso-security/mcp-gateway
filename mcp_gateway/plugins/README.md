@@ -83,3 +83,7 @@ Plugins are discovered automatically at runtime using Python's package import sy
 ## Plugin Configuration
 
 Plugins can be configured using the `load()` method, which receives a configuration dictionary. This dictionary is currently empty by default, but future versions of MCP Gateway may provide plugin-specific configuration options.
+
+## Optional: Tool Outcome Attestation (TOA)
+
+Offline delivery-evidence verify is documented in [docs/toa-optional-plugin.md](../../docs/toa-optional-plugin.md). It is not a built-in guardrail in this PR.
