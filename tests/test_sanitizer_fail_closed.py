@@ -10,7 +10,7 @@ from mcp import types
 
 from mcp_gateway.plugins.base import GuardrailPlugin, PluginContext
 from mcp_gateway.plugins.manager import PluginManager
-from mcp_gateway.sanitizers import sanitize_tool_call_result
+from mcp_gateway.sanitizers import sanitize_resource_read, sanitize_tool_call_result
 
 
 SECRET = "super-secret-token-should-not-leak"
@@ -20,6 +20,20 @@ def _tool_result(text: str) -> types.CallToolResult:
     return types.CallToolResult(
         content=[types.TextContent(type="text", text=text)],
         isError=False,
+    )
+
+
+def _is_error(result: types.CallToolResult) -> bool:
+    """Version-safe error flag (mcp may expose is_error and/or isError)."""
+    val = getattr(result, "is_error", None)
+    if val is None:
+        val = getattr(result, "isError", None)
+    return bool(val)
+
+
+def _joined_text(result: types.CallToolResult) -> str:
+    return " ".join(
+        c.text for c in result.content if isinstance(c, types.TextContent)
     )
 
 
@@ -43,17 +57,22 @@ class _RaiseSanitizationPlugin(_BaseGuardrail):
     def process_response(self, context: PluginContext) -> Any:
         from mcp_gateway.sanitizers import SanitizationError
 
-        raise SanitizationError("blocked by policy")
+        raise SanitizationError(f"blocked by policy; payload={SECRET}")
 
 
 class _RaiseGenericPlugin(_BaseGuardrail):
     def process_response(self, context: PluginContext) -> Any:
-        raise RuntimeError("plugin crashed")
+        raise RuntimeError(f"plugin crashed; payload={SECRET}")
 
 
 class _RedactingPlugin(_BaseGuardrail):
     def process_response(self, context: PluginContext) -> Any:
         return _tool_result("[REDACTED]")
+
+
+class _BadMimePlugin(_BaseGuardrail):
+    def process_response(self, context: PluginContext) -> Any:
+        return (b"ok", {"not": "a-string"})
 
 
 def _manager_with(plugin: GuardrailPlugin) -> PluginManager:
@@ -73,12 +92,10 @@ async def test_wrong_type_plugin_does_not_forward_upstream_secret() -> None:
         result=upstream,
     )
     assert isinstance(result, types.CallToolResult)
-    assert result.is_error is True
-    joined = " ".join(
-        c.text for c in result.content if isinstance(c, types.TextContent)
-    )
+    assert _is_error(result) is True
+    joined = _joined_text(result)
     assert SECRET not in joined
-    assert "policy violation" in joined.lower() or "unexpected type" in joined.lower()
+    assert joined == "Gateway policy violation"
 
 
 @pytest.mark.asyncio
@@ -90,12 +107,11 @@ async def test_sanitization_error_plugin_does_not_forward_upstream_secret() -> N
         tool_name="echo",
         result=upstream,
     )
-    assert result.is_error is True
-    joined = " ".join(
-        c.text for c in result.content if isinstance(c, types.TextContent)
-    )
+    assert _is_error(result) is True
+    joined = _joined_text(result)
     assert SECRET not in joined
-    assert "blocked by policy" in joined
+    assert joined == "Gateway policy violation"
+    assert "blocked by policy" not in joined
 
 
 @pytest.mark.asyncio
@@ -107,11 +123,11 @@ async def test_generic_plugin_exception_does_not_forward_upstream_secret() -> No
         tool_name="echo",
         result=upstream,
     )
-    assert result.is_error is True
-    joined = " ".join(
-        c.text for c in result.content if isinstance(c, types.TextContent)
-    )
+    assert _is_error(result) is True
+    joined = _joined_text(result)
     assert SECRET not in joined
+    assert joined == "Gateway policy violation"
+    assert "plugin crashed" not in joined
 
 
 @pytest.mark.asyncio
@@ -123,12 +139,24 @@ async def test_healthy_plugin_still_returns_sanitized_result() -> None:
         tool_name="echo",
         result=upstream,
     )
-    assert result.is_error is False
-    joined = " ".join(
-        c.text for c in result.content if isinstance(c, types.TextContent)
-    )
+    assert _is_error(result) is False
+    joined = _joined_text(result)
     assert joined == "[REDACTED]"
     assert SECRET not in joined
+
+
+@pytest.mark.asyncio
+async def test_resource_bad_mime_type_is_blocked() -> None:
+    from mcp_gateway.sanitizers import SanitizationError
+
+    with pytest.raises(SanitizationError):
+        await sanitize_resource_read(
+            plugin_manager=_manager_with(_BadMimePlugin()),
+            server_name="demo",
+            uri="file:///secret",
+            content=SECRET.encode(),
+            mime_type="text/plain",
+        )
 
 
 @pytest.mark.asyncio

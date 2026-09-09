@@ -119,13 +119,14 @@ async def sanitize_response(
         raise se
     except Exception as e:
         # Fail closed (#16): never forward the unsanitized upstream response
-        # when the plugin pipeline errors.
+        # when the plugin pipeline errors. Keep exception text in logs only —
+        # SanitizationError may be mapped to client-facing tool results.
         logger.error(
             f"Error running response plugins for {server_name}/{capability_type}/{name}: {e}",
             exc_info=True,
         )
         raise SanitizationError(
-            f"Response plugin execution failed for {server_name}/{capability_type}/{name}: {e}"
+            f"Response plugin execution failed for {server_name}/{capability_type}/{name}"
         ) from e
 
 
@@ -156,11 +157,12 @@ async def sanitize_resource_read(
         request_arguments={"uri": uri},  # Pass URI as argument context
         mcp_context=mcp_context,
     )
-    # Ensure the response is still in the expected format
+    # Ensure the response is still in the expected format (bytes, optional MIME).
     if (
         isinstance(sanitized_response, tuple)
         and len(sanitized_response) == 2
         and isinstance(sanitized_response[0], bytes)
+        and (sanitized_response[1] is None or isinstance(sanitized_response[1], str))
     ):
         return sanitized_response
     else:
@@ -168,7 +170,7 @@ async def sanitize_resource_read(
             f"Response plugin for resource {uri} returned unexpected type {type(sanitized_response)}. Blocking."
         )
         raise SanitizationError(
-            f"Response plugin for resource {uri} returned unexpected type {type(sanitized_response)}"
+            f"Response plugin for resource {uri} returned unexpected type"
         )
 
 
@@ -213,10 +215,11 @@ async def sanitize_tool_call_result(
             mcp_context=mcp_context,
         )
     except SanitizationError as se:
+        # Client-facing text stays generic; details stay in logs only.
         logger.error(
             f"Sanitization blocked tool result for {server_name}/{tool_name}: {se}"
         )
-        return _blocked_tool_result(f"Gateway policy violation: {se}")
+        return _blocked_tool_result("Gateway policy violation")
 
     # Ensure the response is still a CallToolResult — never fail open to the
     # unsanitized upstream payload (#16).
@@ -227,10 +230,7 @@ async def sanitize_tool_call_result(
         f"Response plugin for tool {tool_name} returned unexpected type "
         f"{type(sanitized_result)}. Blocking original result."
     )
-    return _blocked_tool_result(
-        f"Gateway policy violation: response plugin for tool {tool_name} "
-        f"returned unexpected type {type(sanitized_result).__name__}"
-    )
+    return _blocked_tool_result("Gateway policy violation")
 
 
 # Removed old hardcoded sanitization logic for 'AI chip company roadmap' etc.
