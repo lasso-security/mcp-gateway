@@ -15,6 +15,14 @@ class SanitizationError(Exception):
     pass
 
 
+def _blocked_tool_result(message: str) -> types.CallToolResult:
+    """Return a CallToolResult that does not forward upstream content."""
+    return types.CallToolResult(
+        content=[types.TextContent(type="text", text=message)],
+        isError=True,
+    )
+
+
 # Note: These functions now act primarily as dispatchers to the PluginManager.
 # The actual sanitization logic resides within the loaded plugins.
 
@@ -54,18 +62,12 @@ async def sanitize_request(
         sanitized_args = await plugin_manager.process_request(context)
         return sanitized_args
     except Exception as e:
-        # Decide how to handle errors during plugin execution
-        # Option 1: Log and block the request
+        # Fail closed: block the request when request plugins error (#16).
         logger.error(
             f"Error running request plugins for {server_name}/{capability_type}/{name}: {e}",
             exc_info=True,
         )
-        return None  # Block request on plugin error
-        # Option 2: Log and allow original args (potentially risky)
-        # logger.error(f"Error running request plugins for {server_name}/{capability_type}/{name}: {e}", exc_info=True)
-        # return arguments
-        # Option 3: Re-raise a specific error
-        # raise SanitizationError(f"Plugin execution failed: {e}") from e
+        return None
 
 
 async def sanitize_response(
@@ -93,6 +95,9 @@ async def sanitize_response(
 
     Returns:
         The sanitized response, potentially modified by plugins.
+
+    Raises:
+        SanitizationError: When response plugins fail or intentionally block.
     """
     logger.debug(f"Running response plugins for {server_name}/{capability_type}/{name}")
     context = PluginContext(
@@ -113,20 +118,15 @@ async def sanitize_response(
         )
         raise se
     except Exception as e:
-        # Decide how to handle general errors during response plugin execution
-        # Option 1: Log and return original response (potentially revealing sensitive info)
+        # Fail closed (#16): never forward the unsanitized upstream response
+        # when the plugin pipeline errors.
         logger.error(
             f"Error running response plugins for {server_name}/{capability_type}/{name}: {e}",
             exc_info=True,
         )
-        return response  # Return original response on error
-        # Option 2: Raise a generic error
-        # raise SanitizationError(f"Response plugin execution failed: {e}") from e
-        # Option 3: Return a structured error response (if applicable)
-        # return types.CallToolResult(outputs=[{"type": "error", "message": "..."}])
-        # Consider returning an error result instead?
-        # return types.CallToolResult(outputs=[{"type": "error", "message": "Error message"}])
-        return response  # Return original for now
+        raise SanitizationError(
+            f"Response plugin execution failed for {server_name}/{capability_type}/{name}: {e}"
+        ) from e
 
 
 # --- Specific capability wrappers ---
@@ -165,9 +165,11 @@ async def sanitize_resource_read(
         return sanitized_response
     else:
         logger.error(
-            f"Response plugin for resource {uri} returned unexpected type {type(sanitized_response)}. Returning original."
+            f"Response plugin for resource {uri} returned unexpected type {type(sanitized_response)}. Blocking."
         )
-        return content, mime_type
+        raise SanitizationError(
+            f"Response plugin for resource {uri} returned unexpected type {type(sanitized_response)}"
+        )
 
 
 async def sanitize_tool_call_args(
@@ -200,26 +202,35 @@ async def sanitize_tool_call_result(
     """Runs response plugins specifically for tool call results."""
     logger.info(f"Sanitizing tool call result for {server_name} tool {tool_name}")
 
-    sanitized_result = await sanitize_response(
-        plugin_manager=plugin_manager,
-        server_name=server_name,
-        capability_type="tool",
-        name=tool_name,
-        response=result,
-        request_arguments=request_arguments,
-        mcp_context=mcp_context,
-    )
+    try:
+        sanitized_result = await sanitize_response(
+            plugin_manager=plugin_manager,
+            server_name=server_name,
+            capability_type="tool",
+            name=tool_name,
+            response=result,
+            request_arguments=request_arguments,
+            mcp_context=mcp_context,
+        )
+    except SanitizationError as se:
+        logger.error(
+            f"Sanitization blocked tool result for {server_name}/{tool_name}: {se}"
+        )
+        return _blocked_tool_result(f"Gateway policy violation: {se}")
 
-    # Ensure the response is still a CallToolResult
+    # Ensure the response is still a CallToolResult — never fail open to the
+    # unsanitized upstream payload (#16).
     if isinstance(sanitized_result, types.CallToolResult):
         return sanitized_result
-    else:
-        logger.error(
-            f"Response plugin for tool {tool_name} returned unexpected type {type(sanitized_result)}. Returning original."
-        )
-        # Consider returning an error result instead?
-        # return types.CallToolResult(outputs=[{"type": "error", "message": "Error message"}])
-        return result  # Return original for now
+
+    logger.error(
+        f"Response plugin for tool {tool_name} returned unexpected type "
+        f"{type(sanitized_result)}. Blocking original result."
+    )
+    return _blocked_tool_result(
+        f"Gateway policy violation: response plugin for tool {tool_name} "
+        f"returned unexpected type {type(sanitized_result).__name__}"
+    )
 
 
 # Removed old hardcoded sanitization logic for 'AI chip company roadmap' etc.

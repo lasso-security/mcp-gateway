@@ -273,10 +273,13 @@ class PluginManager:
                 else:
                     current_args = plugin.process_request(context_for_plugin)
             except Exception as e:
+                # Fail closed: a guardrail exception must block the request,
+                # not leave the pre-exception args in place for forwarding.
                 logger.error(
                     f"Error in guardrail request plugin {plugin.__class__.__name__}: {e}",
                     exc_info=True,
                 )
+                return None
 
         return current_args
 
@@ -308,10 +311,15 @@ class PluginManager:
                 else:
                     current_response = plugin.process_response(context_for_plugin)
             except Exception as e:
+                # Fail closed (#16): a guardrail that raises (including an
+                # intentional SanitizationError) must not leave the upstream
+                # response bound for forwarding. Re-raise so callers decide
+                # how to surface the block; do not continue the pipeline.
                 logger.error(
                     f"Error in guardrail response plugin {plugin.__class__.__name__}: {e}",
                     exc_info=True,
                 )
+                raise
 
         # Run Tracing plugins for response (for monitoring)
         for plugin in self.get_plugins(TracingPlugin.plugin_type):
