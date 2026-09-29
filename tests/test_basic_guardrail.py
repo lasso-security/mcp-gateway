@@ -61,3 +61,14 @@ class TestBasicGuardrailPlugin:
 
         # If Presidio is loaded, PII might also be anonymized, but we don't assert this
         # as it depends on the environment
+
+    def test_slack_bot_token_masked(self, plugin: BasicGuardrailPlugin) -> None:
+        """Slack bot (xoxb-) and user (xoxp-) tokens are masked, not only xapp-."""
+        text = (
+            "bot=xoxb-2109876543210-2109876543211-EXAMPLExampletoken0 "
+            "user=xoxp-1234567890-1234567890-abcdefghij"
+        )
+        cleaned = plugin._sanitize_text(text)
+        assert "xoxb-2109876543210-2109876543211-EXAMPLExampletoken0" not in cleaned
+        assert "xoxp-1234567890-1234567890-abcdefghij" not in cleaned
+        assert "<SLACK_BOT_TOKEN>" in cleaned
