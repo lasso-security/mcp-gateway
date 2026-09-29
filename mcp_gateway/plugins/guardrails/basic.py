@@ -64,6 +64,13 @@ TOKENS_REGEXES = {
         "regex": r"(?i)xapp-\d-[A-Z0-9]+-\d+-[a-z0-9]+",
         "replacement": "<SLACK_APP_TOKEN>",
     },
+    "slack_bot_user_token": {
+        # Bot (xoxb-), user (xoxp-), legacy workspace (xoxa-/xoxr-/xoxs-) and
+        # configuration (xoxe-) tokens. The app-level token (xapp-) is handled
+        # above; this covers the far more common xox[bparse]- family.
+        "regex": r"(?i)\bxox[bparse]-[0-9a-z-]{10,}",
+        "replacement": "<SLACK_BOT_TOKEN>",
+    },
 }
 
 # Removed DEFAULT_PII_ENTITIES
